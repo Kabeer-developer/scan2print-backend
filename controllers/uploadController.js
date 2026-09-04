@@ -1,4 +1,3 @@
-
 const axios = require("axios");
 const FileUpload = require("../models/FileUpload");
 const Store = require("../models/Store");
@@ -86,8 +85,6 @@ const getStoreUploads = async (req, res, next) => {
   try {
     const { storeId } = req.params;
 
-    // Make sure the logged-in store can only access
-    // its own uploaded files.
     if (req.shop._id.toString() !== storeId.toString()) {
       return res.status(403).json({
         message: "Not authorized",
@@ -122,7 +119,6 @@ const viewFile = async (req, res, next) => {
       });
     }
 
-    // IMPORTANT:
     // Only the store that owns the file can view it.
     if (file.shop.toString() !== req.shop._id.toString()) {
       return res.status(403).json({
@@ -141,15 +137,26 @@ const viewFile = async (req, res, next) => {
       responseType: "stream",
     });
 
-    // Tell the browser to DISPLAY the file,
-    // rather than download it.
-    res.setHeader(
-      "Content-Type",
+    /*
+     * Always prefer the MIME type stored when the customer
+     * originally uploaded the file.
+     *
+     * This is especially important for PDFs uploaded to
+     * Cloudinary as raw resources.
+     */
+    const contentType =
+      file.fileType ||
       response.headers["content-type"] ||
-        file.fileType ||
-        "application/octet-stream"
-    );
+      "application/octet-stream";
 
+    res.status(200);
+
+    res.setHeader("Content-Type", contentType);
+
+    /*
+     * Inline tells the browser that this endpoint is intended
+     * for viewing rather than downloading.
+     */
     res.setHeader(
       "Content-Disposition",
       `inline; filename="${encodeURIComponent(
@@ -157,12 +164,18 @@ const viewFile = async (req, res, next) => {
       )}"`
     );
 
-    // Prevent caching of the protected file.
+    /*
+     * Prevent the protected file from being cached.
+     */
     res.setHeader(
       "Cache-Control",
       "private, no-store, max-age=0"
     );
 
+    /*
+     * Do not expose the Cloudinary URL.
+     * The backend streams the file directly to the client.
+     */
     response.data.pipe(res);
   } catch (err) {
     next(err);
@@ -220,4 +233,3 @@ module.exports = {
   viewFile,
   deleteFile,
 };
-
